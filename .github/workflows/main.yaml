@@ -3,10 +3,11 @@ name: Build and Push Nginx Image to AWS ECR
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-  build-and-tag:
-    name: Build and Tag Docker Image
+  build-and-push:
+    name: Build and Push to ECR
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,41 +24,30 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Automatic Tagging of Releases
-        id: increment-git-tag
-        run: |
-          bash ./build/git_update.sh -v patch
-
-      - name: Build and Tag Docker Image
+      - name: Build, Tag, and Push the Image to Amazon ECR
         id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: devops-demo-dev-ecr
-          IMAGE_TAG: ${{ steps.increment-git-tag.outputs.git-tag }}
+          IMAGE_TAG: latest
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-          
-      - name: Save Docker image info for the next job
-        run: echo "ECR_IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}" >> $GITHUB_ENV
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
 
-  approval-and-push:
-    name: Manual Approval and Push to ECR
-    needs: build-and-tag
+  approve-deployment:
+    name: Manual Approval
     runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'workflow_dispatch'
     steps:
-      - name: Approval Required
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const approved = await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: context.sha,
-              state: 'success',
-              context: 'Manual Approval Required'
-            })
-            if (!approved) throw new Error("Push to ECR approval was not granted.")
-        
+      - name: Awaiting manual approval
+        run: echo "Waiting for manual approval to proceed to deployment."
+
+  deploy-to-ec2:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: approve-deployment
+    steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -65,8 +55,18 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-1
 
-      - name: Push Docker Image to Amazon ECR
+      - name: SSH and Deploy to EC2
         env:
-          ECR_IMAGE_URI: ${{ env.ECR_IMAGE_URI }}
+          ECR_REGISTRY: ${{ steps.build-image.outputs.registry }}
+          ECR_REPOSITORY: devops-demo-dev-ecr
+          IMAGE_TAG: latest
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_KEY: ${{ secrets.EC2_KEY }}
         run: |
-          docker push $ECR_IMAGE_URI
+          ssh -i $EC2_KEY $EC2_USER@$EC2_HOST << EOF
+            docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+            docker stop nginx-container || true
+            docker rm nginx-container || true
+            docker run -d --name nginx-container -p 80:80 $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          EOF
