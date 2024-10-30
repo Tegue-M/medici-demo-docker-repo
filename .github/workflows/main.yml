@@ -39,11 +39,15 @@ jobs:
         aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
         docker push "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
 
-    - name: SSH into EC2 and print success message
+    - name: SSH into EC2 and check for nginx_container
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USER }}
         key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
         script: |
-          echo "SSH successful"
+          if [ "$(docker ps -q -f name=nginx_container)" ]; then
+            echo "Docker container 'nginx_container' is running."
+          else
+            echo "No containers called 'nginx_container' running."
+          fi
