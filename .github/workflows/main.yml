@@ -46,10 +46,16 @@ jobs:
           AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION=eu-west-1
         script: |
-          echo "Stop the current running container if exist..."
-          docker stop nginx_container || true
-          echo "Remove the previous container..."
-          docker rm nginx_container || true
+          # Check if the nginx_container is running before stopping or removing
+          if [ "$(docker ps -q -f name=nginx_container)" ]; then
+              echo "Stopping the current running container..."
+              docker stop nginx_container
+              echo "Removing the previous container..."
+              docker rm nginx_container
+          else
+              echo "No container named nginx_container is running."
+          fi
+
           echo "Logging in to ECR..."
           aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
           echo "Pulling image from ECR..."
