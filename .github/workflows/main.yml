@@ -40,13 +40,13 @@ jobs:
         docker push "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
 
     - name: Manual Approval Step
-      uses: FredrikNoren/await-approval-action@v1.0.1
+      uses: hmarr/await-approval@v1
       with:
-        approvers: 'your-username'  # Replace 'your-username' with your GitHub username
+        approvers: 'Tegue-M'  # Replace 'your-username' with your GitHub username
         timeout: '15m'  # Set a timeout for the approval
 
     - name: SSH into EC2 and deploy nginx_container
-      if: ${{ steps.manual_approval.outputs.approved == 'true' }}
+      if: ${{ steps.approval.outputs.approved == 'true' }}
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.EC2_HOST }}
