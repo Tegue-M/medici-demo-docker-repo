@@ -1,10 +1,8 @@
-FROM node:alpine
-RUN npm install pm2 -g
-#creating working directory
-WORKDIR /usr/local/var/www/nodeapp
-#install dependences 
-COPY package*.json ./
-RUN npm i --omit=dev --only=production
-#Bundle app
-COPY . .
-CMD [ "pm2-runtime", "app.js" ]
+# Use the official Nginx image as a base
+FROM nginx:alpine
+
+# Copy custom HTML file to Nginx's default directory
+COPY html /usr/share/nginx/html
+
+# Expose port 80
+EXPOSE 80

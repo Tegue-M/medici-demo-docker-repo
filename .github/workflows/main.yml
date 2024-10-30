@@ -1,9 +1,9 @@
-name: Node.js API Deployment
+name: Nginx Deployment
 
 on:
   push:
     branches:
-      - main 
+      - develop 
 
 jobs:
   deploy:
@@ -13,77 +13,69 @@ jobs:
       TAG: ${{ github.sha }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 14
+    - name: Build Docker image and set Docker tag with TAG
+      run: |
+        echo "Generated Docker tag: $TAG"
+        docker build -t "${{ secrets.REPOSITORY_NAME }}" .
+        docker tag "${{ secrets.REPOSITORY_NAME }}" "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
 
-      - name: Install dependencies
-        run: npm install
+    - name: Debug Environment Variables
+      run: |
+        echo "AWS_REGISTRY_URL: ${{ secrets.AWS_REGISTRY_URL }}"
+        echo "Generated Docker tag:  $TAG"
 
-      - name: Build Docker image and set Docker tag with TAG
-        run: |
-          echo "Generated Docker tag: $TAG"
-          docker build -t "${{ secrets.REPOSITORY_NAME }}" .
-          docker tag "${{ secrets.REPOSITORY_NAME }}" "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: eu-west-1
 
-      - name: Debug Environment Variables
-        run: |
-          echo "AWS_REGISTRY_URL: ${{ secrets.AWS_REGISTRY_URL }}"
-          echo "Generated Docker tag:  $TAG"
+    - name: Push Docker image to Amazon ECR
+      run: |
+        aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
+        docker push "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-1
-
-      - name: Push Docker image to Amazon ECR
-        run: |
-          aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
-          docker push "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
-
-      - name: SSH into EC2 instance and deploy
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          envs: |
-            TAG=${TAG}
-            AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-            AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-            AWS_REGION=eu-west-1
-          script: |
-            echo "AWS CLI version: $(aws --version)"
-            echo "Docker version: $(docker --version)"
+    - name: SSH into EC2 instance and deploy
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+        envs: |
+          TAG=${TAG}
+          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION=eu-west-1
+        script: |
+          echo "AWS CLI version: $(aws --version)"
+          echo "Docker version: $(docker --version)"
     
-            echo "Stop the current running container if it exists..."
-            docker stop container_name || true
+          echo "Stop the current running container if it exists..."
+          docker stop nginx_container_name || true
     
-            echo "Remove the previous container..."
-            docker rm container_name || true
+          echo "Remove the previous container..."
+          docker rm nginx_container_name || true
     
-            echo "AWS credentials set...."
-            export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-            export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-            export AWS_REGION=${AWS_REGION}
+          echo "AWS credentials set...."
+          export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+          export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+          export AWS_REGION=${AWS_REGION}
     
-            echo "Logging in to ECR...."
-            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
-            echo "Logged in successfully..."
+          echo "Logging in to ECR...."
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
+          echo "Logged in successfully..."
     
-            echo "Pulling image from ECR..."
-            echo "Docker pull command: docker pull \"${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${{ env.TAG }}\""
-            docker pull "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${{ env.TAG }}"
-            echo "Docker pull completed..."
+          echo "Pulling image from ECR..."
+          echo "Docker pull command: docker pull \"${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${{ env.TAG }}\""
+          docker pull "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${{ env.TAG }}"
+          echo "Docker pull completed..."
     
-            echo "Running the container..."
-            docker run -d \
-              --name bb_internal_api \
-              --env-file /path/to/dot/env \
-              -p ${{ secrets.EXPOSED_PORT }}:${{ secrets.APPLICATION_PORT }} "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${{ env.TAG }}"
+          echo "Running the Nginx container..."
+          docker run -d \
+            --name nginx_container_name \
+            -p ${{ secrets.EXPOSED_PORT }}:80 \
+            "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${{ env.TAG }}"
