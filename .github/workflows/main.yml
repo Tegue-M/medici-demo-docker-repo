@@ -6,7 +6,7 @@ on:
       - main 
 
 jobs:
-  deploy:
+  build_and_push:
     runs-on: ubuntu-latest
 
     env:
@@ -39,6 +39,22 @@ jobs:
         aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
         docker push "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
 
+  approval:
+    needs: build_and_push
+    runs-on: ubuntu-latest
+    steps:
+    - name: Await Manual Approval
+      uses: sls-library/await-approval@v0.1.0
+      with:
+        approvers: 'Tegue-M' # Replace with GitHub usernames for approval
+        timeout: '15m' # Set timeout as desired
+      timeout-minutes: 15  # Fail if approval is not granted within 15 minutes
+
+  deploy:
+    needs: approval
+    runs-on: ubuntu-latest
+
+    steps:
     - name: SSH into EC2 and deploy nginx_container
       uses: appleboy/ssh-action@master
       with:
