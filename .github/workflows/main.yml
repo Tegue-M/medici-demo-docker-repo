@@ -39,16 +39,16 @@ jobs:
         aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
         docker push "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
 
-    - name: SSH into EC2 and check for nginx_container
+    - name: SSH into EC2 and manage nginx_container
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USER }}
         key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
         envs: |
-          TAG=${{ env.TAG }}  # Using env context for TAG
-          AWS_REGION=${{ secrets.AWS_REGION }}  # Ensure AWS_REGION is in secrets
-          AWS_ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}  # Ensure AWS_ACCOUNT_ID is in secrets
+          TAG=${{ env.TAG }}  
+          AWS_REGION=${{ secrets.AWS_REGION }}
+          AWS_ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}
         script: |
           export TAG="${{ env.TAG }}"
           export AWS_REGION="${{ secrets.AWS_REGION }}"
@@ -58,6 +58,17 @@ jobs:
           echo "TAG: ${TAG}"
           echo "AWS_REGION: ${AWS_REGION}"
           echo "ACCOUNT_ID: ${ACCOUNT_ID}"
+
+          echo "Checking for existing nginx_container..."
+          if docker ps -a --format '{{.Names}}' | grep -Eq '^nginx_container$'; then
+            echo "Stopping existing nginx_container..."
+            docker stop nginx_container || true
+
+            echo "Removing existing nginx_container..."
+            docker rm nginx_container || true
+          else
+            echo "No existing nginx_container found."
+          fi
 
           echo "Logging in to Amazon ECR..."
           aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
