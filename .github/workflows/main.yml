@@ -50,5 +50,11 @@ jobs:
           AWS_REGION=${{ secrets.AWS_REGION }}
           AWS_ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}
         script: |
-            export AWS_REGION=${AWS_REGION}
-            echo "These are my environment variables: ${AWS_REGION}"
+          export TAG="${TAG}"
+          export AWS_REGION="${AWS_REGION}"
+          export ACCOUNT_ID="${AWS_ACCOUNT_ID}"
+
+          echo "These are my environment variables:"
+          echo "TAG: ${TAG}"
+          echo "AWS_REGION: ${AWS_REGION}"
+          echo "ACCOUNT_ID: ${ACCOUNT_ID}"
