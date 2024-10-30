@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      TAG: ${{ github.sha }}  # Set the Docker tag to the current commit SHA
+      TAG: ${{ github.sha }}
 
     steps:
     - name: Checkout code
@@ -39,43 +39,28 @@ jobs:
         aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
         docker push "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
 
-    - name: SSH into EC2 instance and deploy
+    - name: SSH into EC2 and check for nginx_container
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.EC2_HOST }}
         username: ${{ secrets.EC2_USER }}
         key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-        envs: |
-          TAG=${TAG}
-          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION=eu-west-1
         script: |
-          echo "AWS CLI version: $(aws --version)"
-          echo "Docker version: $(docker --version)"
+          # Set environment variables for region and account ID
+          REGION="eu-west-1"
+          ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID }}"
 
-          # Stop and remove existing container if it exists
-          echo "Stop the current running container if it exists..."
-          docker stop nginx_container || true
-          echo "Remove the previous container..."
-          docker rm nginx_container || true
-
-          # Set AWS credentials for CLI usage
-          export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-          export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-          export AWS_REGION=${AWS_REGION}
-          echo "AWS credentials set...."
-
-          # Log in to ECR
-          echo "Logging in to ECR...."
-          aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com"
-          echo "Logged in successfully..."
-
-          # Pull the Docker image from ECR
-          echo "Pulling image from ECR..."
-          docker pull "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
-          echo "Docker pull completed..."
-
-          # Run the Docker container
-          echo "Running the container..."
-          docker run -d --name nginx_container "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
+          # Check for running nginx_container
+          if [ "$(docker ps -q -f name=nginx_container)" ]; then
+            echo "Docker container 'nginx_container' is running."
+          else
+            echo "No containers called 'nginx_container' running."
+            echo "Logging in to ECR...."
+            
+            # Log in to ECR
+            aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com"
+            
+            echo "Logged in successfully..."
+            
+            # Additional commands can be added here for deploying the new container
+          fi
