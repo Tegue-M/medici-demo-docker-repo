@@ -32,7 +32,7 @@ jobs:
     - name: Push Docker image to Amazon ECR
       run: |
         aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
-        docker push "${{ secrets.AWS_REGISTRY_URL }}}:${TAG}"
+        docker push 296274010522.dkr.ecr.eu-west-1.amazonaws.com/devops-demo-dev-ecr:"${TAG}"
 
     - name: SSH into EC2 instance and deploy
       uses: appleboy/ssh-action@master
