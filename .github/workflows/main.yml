@@ -71,9 +71,7 @@ jobs:
           fi
 
           echo "Logging in to Amazon ECR..."
-          aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
-
-          if [ $? -eq 0 ]; then
+          if aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}; then
             echo "Successfully logged in to Amazon ECR."
           else
             echo "Failed to log in to Amazon ECR."
@@ -81,12 +79,17 @@ jobs:
           fi
 
           echo "Pulling image from ECR..."
-          docker pull "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
-          echo "Docker pull completed."
+          if docker pull "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"; then
+            echo "Docker pull completed."
+          else
+            echo "Failed to pull image from ECR."
+            exit 1
+          fi
 
           echo "Running the nginx_container..."
-          docker run -d \
-            --name nginx_container \
-            -p 80:80 \
-            "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
-          echo "nginx_container is running on port 80."
+          if docker run -d --name nginx_container -p 80:80 "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"; then
+            echo "nginx_container is running on port 80."
+          else
+            echo "Failed to start nginx_container."
+            exit 1
+          fi
