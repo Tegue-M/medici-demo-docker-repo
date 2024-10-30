@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main 
-
+# This job builds the docker image and pushes to ECR
 jobs:
   build_and_push:
     runs-on: ubuntu-latest
@@ -32,18 +32,18 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: eu-west-1
+        aws-region: ${{ secrets.AWS_REGION }}
 
     - name: Push Docker image to Amazon ECR
       run: |
-        aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
+        aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
         docker push "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
 
   deploy:
     runs-on: ubuntu-latest
     needs: build_and_push
     environment: 
-      name: dev
+      name: main
 
     steps:
     - name: SSH into EC2 and deploy nginx_container
@@ -61,7 +61,7 @@ jobs:
           export AWS_REGION="${{ secrets.AWS_REGION }}"
           export ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID }}"
 
-          echo "These are my environment variables:"
+          echo "Making sure env variables passed in correctly:"
           echo "TAG: ${TAG}"
           echo "AWS_REGION: ${AWS_REGION}"
           echo "ACCOUNT_ID: ${ACCOUNT_ID}"
