@@ -39,6 +39,13 @@ jobs:
         aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
         docker push "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
 
+    # Manual approval step
+    - name: Request approval
+      uses: trstringer/manual-approval@v1
+      with:
+        secret: ${{ secrets.GITHUB_TOKEN }}  # Using GITHUB_TOKEN for authentication
+        approvers: Tegue-M  # Replace with your GitHub username
+
     - name: SSH into EC2 and deploy nginx_container
       uses: appleboy/ssh-action@master
       with:
