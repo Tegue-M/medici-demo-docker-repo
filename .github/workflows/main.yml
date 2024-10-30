@@ -63,7 +63,7 @@ jobs:
             
             echo "Logged in successfully..."
 
-            ech0 "$AWS_REGION, $ACCOUNT_ID, $AWS_ACCESS_KEY_ID"
+            echo "$AWS_REGION, $ACCOUNT_ID, $AWS_ACCESS_KEY_ID"
             
             # Additional commands can be added here for deploying the new container
           fi
