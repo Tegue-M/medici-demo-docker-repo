@@ -47,22 +47,17 @@ jobs:
         key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
         envs: |
           TAG=${{ env.TAG }}  # Using env context for TAG
-          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION=${{ secrets.AWS_REGION }}  # Ensure AWS_REGION is in secrets
           AWS_ACCOUNT_ID=${{ secrets.AWS_ACCOUNT_ID }}  # Ensure AWS_ACCOUNT_ID is in secrets
         script: |
           export TAG="${{ env.TAG }}"
-          export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-          export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-          export AWS_REGION=${AWS_REGION}
+          export AWS_REGION="${{ secrets.AWS_REGION }}"
           export ACCOUNT_ID="${{ secrets.AWS_ACCOUNT_ID }}"
 
           echo "These are my environment variables:"
           echo "TAG: ${TAG}"
           echo "AWS_REGION: ${AWS_REGION}"
-          echo "AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}"
-          echo "AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}"
+          echo "ACCOUNT_ID: ${ACCOUNT_ID}"
 
           echo "Logging in to Amazon ECR..."
           aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
