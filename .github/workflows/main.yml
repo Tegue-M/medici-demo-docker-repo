@@ -39,7 +39,7 @@ jobs:
         aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_REGISTRY_URL }}
         docker push "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
 
-    - name: SSH into EC2 and manage nginx_container
+    - name: SSH into EC2 and deploy nginx_container
       uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.EC2_HOST }}
@@ -79,3 +79,14 @@ jobs:
             echo "Failed to log in to Amazon ECR."
             exit 1
           fi
+
+          echo "Pulling image from ECR..."
+          docker pull "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
+          echo "Docker pull completed."
+
+          echo "Running the nginx_container..."
+          docker run -d \
+            --name nginx_container \
+            -p 80:80 \
+            "${{ secrets.AWS_REGISTRY_URL }}/${{ secrets.REPOSITORY_NAME }}:${TAG}"
+          echo "nginx_container is running on port 80."
