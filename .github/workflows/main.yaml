@@ -1,38 +1,72 @@
----
-    name: Build and Push Nginx Image to AWS ECR
-    on:
-      push:
-        branches: [ main ]
-    jobs:
-      build-and-push:
-        name: Build and Push to ECR
-        runs-on: ubuntu-latest
-        steps:
-        - name: Checkout
-          uses: actions/checkout@v2
-    
-        - name: Configure AWS credentials
-          uses: aws-actions/configure-aws-credentials@v1
-          with:
-            aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-            aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-            aws-region: eu-west-1
-    
-        - name: Login to Amazon ECR
-          id: login-ecr
-          uses: aws-actions/amazon-ecr-login@v1
+name: Build and Push Nginx Image to AWS ECR
 
-        - name: Automatic Tagging of Releases
-          id: increment-git-tag
-          run: |
-            bash ./build/git_update.sh -v patch
-    
-        - name: Build, Tag, and Push the Image to Amazon ECR
-          id: build-image
-          env:
-            ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-            ECR_REPOSITORY: devops-demo-dev-ecr
-            IMAGE_TAG: latest
-          run: |
-            docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
-            docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-tag:
+    name: Build and Tag Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Automatic Tagging of Releases
+        id: increment-git-tag
+        run: |
+          bash ./build/git_update.sh -v patch
+
+      - name: Build and Tag Docker Image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: devops-demo-dev-ecr
+          IMAGE_TAG: ${{ steps.increment-git-tag.outputs.git-tag }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          
+      - name: Save Docker image info for the next job
+        run: echo "ECR_IMAGE_URI=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}" >> $GITHUB_ENV
+
+  approval-and-push:
+    name: Manual Approval and Push to ECR
+    needs: build-and-tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Approval Required
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const approved = await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.sha,
+              state: 'success',
+              context: 'Manual Approval Required'
+            })
+            if (!approved) throw new Error("Push to ECR approval was not granted.")
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-1
+
+      - name: Push Docker Image to Amazon ECR
+        env:
+          ECR_IMAGE_URI: ${{ env.ECR_IMAGE_URI }}
+        run: |
+          docker push $ECR_IMAGE_URI
